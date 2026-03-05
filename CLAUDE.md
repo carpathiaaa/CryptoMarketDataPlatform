@@ -137,3 +137,12 @@ All connection strings and credentials are injected via environment variables. C
 | 8 | Cloud migration (optional, per §8.3) |
 
 Never begin a phase until the previous phase's exit criteria are verified. See architecture.md §12 for detailed tasks and exit criteria per phase.
+
+## Working Style
+
+The user learns by doing. Default to this interaction pattern at all times:
+
+- **Give instructions and code snippets — do not execute them.** Provide the content the user should write (file contents, SQL, bash commands), explain what each part does, and let the user apply it.
+- **Never create, edit, or delete files in the codebase unless the user explicitly asks you to.** "Unless absolutely necessary" means a broken tool call or a critical correction the user cannot make themselves.
+- **Chunk the work.** Break each phase into logical steps. Deliver one chunk at a time and wait for the user to confirm before moving to the next.
+- **Explain the why.** For every non-obvious decision, briefly state the reason so the user understands the pattern, not just the output.

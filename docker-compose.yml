@@ -1,0 +1,199 @@
+x-airflow-common: &airflow-common
+  build: ./airflow
+  environment:
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_DB_USER}:${AIRFLOW_DB_PASSWORD}@postgres-airflow:5432/${AIRFLOW_DB_NAME}
+    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY}
+    AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY}
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__METRICS__STATSD_ON: 'true'
+    AIRFLOW__METRICS__STATSD_HOST: statsd-exporter
+    AIRFLOW__METRICS__STATSD_PORT: '8125'
+    AIRFLOW__METRICS__STATSD_PREFIX: airflow
+    MARKET_DB_USER: ${MARKET_DB_USER}
+    MARKET_DB_PASSWORD: ${MARKET_DB_PASSWORD}
+    MARKET_DB_NAME: ${MARKET_DB_NAME}
+    COINGECKO_API_KEY: ${COINGECKO_API_KEY}
+    API_KEY: ${API_KEY}
+  volumes:
+    - ./airflow/dags:/opt/airflow/dags
+    - ./airflow/tasks:/opt/airflow/tasks
+    - ./airflow/plugins:/opt/airflow/plugins
+    - ./airflow/great_expectations:/opt/airflow/great_expectations
+    - ./airflow/config:/opt/airflow/config
+    - airflow_logs:/opt/airflow/logs
+  networks:
+    - platform_net
+  depends_on:
+    postgres-airflow:
+      condition: service_healthy
+
+services:
+
+  postgres-airflow:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${AIRFLOW_DB_USER}
+      POSTGRES_PASSWORD: ${AIRFLOW_DB_PASSWORD}
+      POSTGRES_DB: ${AIRFLOW_DB_NAME}
+    volumes:
+      - postgres_airflow_data:/var/lib/postgresql/data
+    networks:
+      - platform_net
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  postgres-market:
+    build: ./postgres
+    environment:
+      POSTGRES_USER: ${MARKET_DB_USER}
+      POSTGRES_PASSWORD: ${MARKET_DB_PASSWORD}
+      POSTGRES_DB: ${MARKET_DB_NAME}
+    volumes:
+      - postgres_market_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d
+    ports:
+      - "5433:5432"
+    networks:
+      - platform_net
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  airflow-init:
+    <<: *airflow-common
+    command:
+      - bash
+      - -c
+      - "airflow db migrate && airflow users create -u \"$$AIRFLOW_ADMIN_USER\" -p \"$$AIRFLOW_ADMIN_PASSWORD\" -f Admin -l User -r Admin -e \"$$AIRFLOW_ADMIN_EMAIL\" || true"
+
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_DB_USER}:${AIRFLOW_DB_PASSWORD}@postgres-airflow:5432/${AIRFLOW_DB_NAME}
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY}
+      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY}
+      AIRFLOW_ADMIN_USER: ${AIRFLOW_ADMIN_USER}
+      AIRFLOW_ADMIN_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD}
+      AIRFLOW_ADMIN_EMAIL: ${AIRFLOW_ADMIN_EMAIL}
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    depends_on:
+      postgres-airflow:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [ "CMD-SHELL", "airflow jobs check --job-type SchedulerJob" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres-airflow:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+      airflow-scheduler:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "--fail", "http://localhost:8080/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  api:
+    build: ./api
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${MARKET_DB_USER}:${MARKET_DB_PASSWORD}@postgres-market:5432/${MARKET_DB_NAME}
+      API_KEY: ${API_KEY}
+    ports:
+      - "8000:8000"
+    networks:
+      - platform_net
+    depends_on:
+      postgres-market:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  statsd-exporter:
+    image: prom/statsd-exporter:latest
+    ports:
+      - "9102:9102"
+      - "8125:8125/udp"
+    networks:
+      - platform_net
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - platform_net
+    healthcheck:
+      test: [ "CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+    ports:
+      - "3000:3000"
+    networks:
+      - platform_net
+    depends_on:
+      postgres-market:
+        condition: service_healthy
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "--fail", "http://localhost:3000/api/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+volumes:
+  postgres_airflow_data:
+  postgres_market_data:
+  airflow_logs:
+  prometheus_data:
+  grafana_data:
+
+
+networks:
+  platform_net:
+    driver: bridge

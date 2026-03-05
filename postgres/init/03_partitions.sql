@@ -1,0 +1,18 @@
+-- =============================================================
+-- Partition Management — Documentation Only
+-- =============================================================
+-- Partitions for raw.market_snapshots are managed automatically
+-- by pg_partman. Do NOT create or drop partitions manually.
+--
+-- Partman is registered via partman.create_parent() in 02_tables.sql.
+-- It creates one child partition per month, e.g.:
+--   raw.market_snapshots_p2026_03
+--   raw.market_snapshots_p2026_04
+--
+-- The pg_partman background worker (pg_partman_bgw) handles:
+--   - Pre-creating future partitions (p_premake = 3 months ahead)
+--   - Detaching old partitions when retention policy is applied
+--
+-- To manually trigger maintenance (e.g. after a long pause):
+--   SELECT partman.run_maintenance('raw.market_snapshots');
+-- =============================================================

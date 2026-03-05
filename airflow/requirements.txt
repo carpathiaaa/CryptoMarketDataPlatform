@@ -1,0 +1,4 @@
+great-expectations==0.18.19
+psycopg2-binary==2.9.9
+requests==2.31.0
+statsd==4.0.1

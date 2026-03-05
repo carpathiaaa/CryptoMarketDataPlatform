@@ -1,1 +1,19 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
 .venv/
+
+# dbt
+dbt/target/
+dbt/logs/
+dbt/dbt_packages/
+
+# Airflow
+airflow/logs
+
+# OS
+.DS_Store
+
