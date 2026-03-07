@@ -140,9 +140,10 @@ Never begin a phase until the previous phase's exit criteria are verified. See a
 
 ## Working Style
 
-The user learns by doing. Default to this interaction pattern at all times:
+The user is actively learning data engineering. Default to this interaction pattern at all times:
 
-- **Give instructions and code snippets — do not execute them.** Provide the content the user should write (file contents, SQL, bash commands), explain what each part does, and let the user apply it.
+- **No full file dumps — give focused snippets.** Provide only the relevant function, block, or section with enough surrounding context to place it correctly. The user types the full file themselves. This forces engagement with the code rather than copy-paste.
 - **Never create, edit, or delete files in the codebase unless the user explicitly asks you to.** "Unless absolutely necessary" means a broken tool call or a critical correction the user cannot make themselves.
 - **Chunk the work.** Break each phase into logical steps. Deliver one chunk at a time and wait for the user to confirm before moving to the next.
-- **Explain the why.** For every non-obvious decision, briefly state the reason so the user understands the pattern, not just the output.
+- **Explain the why — including the field context.** For every non-obvious decision: (1) state the reason for the specific choice, (2) name the data engineering pattern it represents, and (3) briefly note where this pattern appears in production or interviews. The goal is to build understanding of the field, not just this project.
+- **Teach concepts before code.** Before giving any snippet, briefly explain what the component is, what problem it solves, and how it fits into the overall data flow. Then show the code.

@@ -115,10 +115,84 @@
 
 ---
 
-## Phase 2 — Raw Ingestion DAG ⬜
+## Phase 2 — Raw Ingestion DAG
 **Goal:** Airflow DAG extracts from CoinGecko and loads into `raw.market_snapshots`. Idempotent.
 
-*Chunks will be defined when Phase 1 Chunk 8 is complete.*
+---
+
+### Chunk 1 — extract.py ✅
+**File:** `airflow/tasks/extract.py`
+
+| # | Check | Pass? |
+|---|---|---|
+| 1 | `fetch_top20()` calls CoinGecko `/coins/markets` with correct params (vs_currency, per_page, page) | ✅ |
+| 2 | Request includes `X-CG-Demo-Api-Key` header from env var | ✅ |
+| 3 | Function raises an exception (not silently returns) on non-200 response | ✅ |
+| 4 | Returns a list of dicts — only the fields needed for `raw.market_snapshots` | ✅ |
+| 5 | `snapshot_timestamp` is set to the Airflow `logical_date` (not `datetime.now()`) | ✅ |
+
+---
+
+### Chunk 2 — Great Expectations Setup + validate.py ✅
+**Files:** `airflow/great_expectations/` (GE init + suite), `airflow/tasks/validate.py`
+**Note:** GE version is 1.13.0. Use `context.suites.get()`, `context.data_sources.add_or_update_pandas()`, `context.suites.update()`. No `init` CLI needed — use `gx.get_context(mode="file", project_root_dir=...)`.
+
+| # | Check | Pass? |
+|---|---|---|
+| 1 | GE context initialised via `gx.get_context(mode="file")` on the host (GE 1.x — no `init` CLI needed) | ✅ |
+| 2 | Expectation suite created with: not_null on coin_id + price_usd, value range on price_usd > 0 | ✅ |
+| 3 | `validate_snapshot(records)` uses correct GE 1.x API and returns pass/fail bool | ✅ |
+| 4 | Validation result written to GE's local store automatically by file-based context | ✅ |
+
+---
+
+### Chunk 3 — load.py ⬜
+**File:** `airflow/tasks/load.py`
+
+| # | Check | Pass? |
+|---|---|---|
+| 1 | `load_records(records)` opens a connection using `MARKET_DB_CONN` env var | ⬜ |
+| 2 | Uses `INSERT ... ON CONFLICT (coin_id, snapshot_timestamp) DO UPDATE` — idempotent | ⬜ |
+| 3 | Returns row count inserted/updated | ⬜ |
+| 4 | Re-running with same data does not increase row count | ⬜ |
+
+---
+
+### Chunk 4 — pipeline_log.py ⬜
+**File:** `airflow/tasks/pipeline_log.py`
+
+| # | Check | Pass? |
+|---|---|---|
+| 1 | `log_pipeline_run(execution_date, status, rows_inserted, error_message)` writes one row to `raw.pipeline_runs` | ⬜ |
+| 2 | `status` is one of: `SUCCESS`, `QUALITY_FAIL`, `ERROR` | ⬜ |
+| 3 | Function handles `None` for `error_message` (nullable column) | ⬜ |
+
+---
+
+### Chunk 5 — market_ingestion.py (DAG) ⬜
+**File:** `airflow/dags/market_ingestion.py`
+
+| # | Check | Pass? |
+|---|---|---|
+| 1 | DAG uses `schedule_interval='@hourly'` and `catchup=False` | ⬜ |
+| 2 | `HttpSensor` gates the extract — DAG waits if API is unreachable | ⬜ |
+| 3 | `BranchPythonOperator` routes to `load_market_data` or `skip_and_alert` based on validation result | ⬜ |
+| 4 | `skip_and_alert` writes `QUALITY_FAIL` to `pipeline_runs` | ⬜ |
+| 5 | `log_pipeline_run` task uses `TriggerRule.NONE_FAILED` — runs on both branches | ⬜ |
+| 6 | All business logic is imported from `airflow/tasks/` — no inline logic in DAG file | ⬜ |
+
+---
+
+### Chunk 6 — End-to-End Verification ⬜
+**Goal:** Phase 2 exit criteria met
+
+| # | Check | Pass? |
+|---|---|---|
+| 1 | DAG triggered manually — completes successfully end-to-end | ⬜ |
+| 2 | `raw.market_snapshots` has exactly 20 rows after one run | ⬜ |
+| 3 | Re-triggering the same `execution_date` does not duplicate rows | ⬜ |
+| 4 | Force a GE validation failure — `skip_and_alert` branch fires | ⬜ |
+| 5 | `raw.pipeline_runs` has a record for every run with correct status | ⬜ |
 
 ---
 
