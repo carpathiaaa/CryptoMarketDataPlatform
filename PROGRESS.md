@@ -146,26 +146,26 @@
 
 ---
 
-### Chunk 3 — load.py ⬜
+### Chunk 3 — load.py ✅
 **File:** `airflow/tasks/load.py`
 
 | # | Check | Pass? |
 |---|---|---|
-| 1 | `load_records(records)` opens a connection using `MARKET_DB_CONN` env var | ⬜ |
-| 2 | Uses `INSERT ... ON CONFLICT (coin_id, snapshot_timestamp) DO UPDATE` — idempotent | ⬜ |
-| 3 | Returns row count inserted/updated | ⬜ |
+| 1 | `load_records(records)` opens a connection using individual env vars (MARKET_DB_USER, MARKET_DB_PASSWORD, MARKET_DB_NAME) | ✅ |
+| 2 | Uses `INSERT ... ON CONFLICT (coin_id, snapshot_timestamp) DO UPDATE` — idempotent | ✅ |
+| 3 | Returns row count inserted/updated | ✅ |
 | 4 | Re-running with same data does not increase row count | ⬜ |
 
 ---
 
-### Chunk 4 — pipeline_log.py ⬜
+### Chunk 4 — pipeline_log.py ✅
 **File:** `airflow/tasks/pipeline_log.py`
 
 | # | Check | Pass? |
 |---|---|---|
-| 1 | `log_pipeline_run(execution_date, status, rows_inserted, error_message)` writes one row to `raw.pipeline_runs` | ⬜ |
-| 2 | `status` is one of: `SUCCESS`, `QUALITY_FAIL`, `ERROR` | ⬜ |
-| 3 | Function handles `None` for `error_message` (nullable column) | ⬜ |
+| 1 | `log_pipeline_run(execution_date, status, rows_inserted, error_message)` writes one row to `raw.pipeline_runs` | ✅ |
+| 2 | `status` is one of: `SUCCESS`, `QUALITY_FAIL`, `ERROR` | ✅ |
+| 3 | Function handles `None` for `error_message` (nullable column) | ✅ |
 
 ---
 

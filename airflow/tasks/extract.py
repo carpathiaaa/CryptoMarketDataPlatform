@@ -25,6 +25,7 @@ def fetch_top20(logical_date: datetime) -> list[dict]:
         {
             "coin_id": coin["id"],
             "symbol": coin["symbol"],
+            "name": coin["name"],
             "price_usd": coin["current_price"],
             "market_cap_usd": coin["market_cap"],
             "volume_24h_usd": coin["total_volume"],
